@@ -2,6 +2,8 @@ use macon::Builder;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::types::Phase;
+
 use super::{
     InputItem, MessageStatus, Model, ReasoningConfig, Role, ServiceTier, TextConfig, Tool,
     ToolChoice, Truncation,
@@ -133,6 +135,11 @@ pub struct InputMessage {
     pub role: Role,
     /// Text, image, or audio input to the model, used to generate a response. Can also contain previous assistant responses.
     pub content: ContentInput,
+
+    /// Labels an `assistant` message as intermediate commentary (`commentary`)
+    /// or the final answer (`final_answer`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub phase: Option<Phase>,
 }
 
 /// Text, image, or audio input to the model, used to generate a response. Can also contain previous assistant responses.
@@ -153,6 +160,11 @@ pub struct APIInputMessage {
     /// The status of the message. Populated when the message is returned via API.
     #[serde(skip_serializing)]
     pub status: Option<MessageStatus>,
+
+    /// Labels an `assistant` message as intermediate commentary (`commentary`)
+    /// or the final answer (`final_answer`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub phase: Option<Phase>,
 }
 
 /// Text, image, or audio input to the model, used to generate a response. Can also contain previous assistant responses.

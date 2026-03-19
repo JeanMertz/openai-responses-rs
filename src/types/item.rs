@@ -65,6 +65,13 @@ pub enum InputItem {
     Reasoning(Reasoning),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Phase {
+    Commentary,
+    FinalAnswer,
+}
+
 /// An output message from the model.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutputMessage {
@@ -76,6 +83,10 @@ pub struct OutputMessage {
     pub role: Role,
     /// The status of the message input.
     pub status: MessageStatus,
+    /// Labels an `assistant` message as intermediate commentary (`commentary`)
+    /// or the final answer (`final_answer`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub phase: Option<Phase>,
 }
 
 /// The content of the output message.
