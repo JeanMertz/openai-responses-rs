@@ -17,10 +17,14 @@ pub enum Truncation {
 /// Learn more:
 /// - [Text inputs and outputs](https://platform.openai.com/docs/guides/text)
 /// - [Structured Outputs](https://platform.openai.com/docs/guides/structured-outputs)
-#[derive(Debug, Clone, Builder, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TextConfig {
     /// An object specifying the format that the model must output.
     pub format: TextFormat,
+
+    /// Controls the verbosity of text output. Supported by GPT-5+ models.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verbosity: Option<TextVerbosity>,
 }
 
 /// An object specifying the format that the model must output.
@@ -47,6 +51,18 @@ pub enum TextFormat {
     /// Using `JsonSchema` is recommended for models that support it.
     /// Note that the model will not generate JSON without a system or user message instructing it to do so.
     JsonObject,
+}
+
+/// Controls the verbosity of text output.
+///
+/// See: <https://platform.openai.com/docs/guides/text>
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TextVerbosity {
+    Low,
+    #[default]
+    Medium,
+    High,
 }
 
 /// Configuration options for [reasoning models](https://platform.openai.com/docs/guides/reasoning).
