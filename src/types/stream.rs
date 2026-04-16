@@ -258,4 +258,13 @@ pub enum Event {
     /// Emitted when an error occurs.
     #[serde(rename = "error")]
     Error { error: Error },
+    /// Emitted periodically to keep the connection alive during long processing.
+    #[serde(rename = "keepalive")]
+    Keepalive {},
+    /// Connection health check event.
+    #[serde(rename = "ping")]
+    Ping {},
+    /// Catch-all for event types not yet supported by this crate.
+    #[serde(other)]
+    Unknown,
 }
