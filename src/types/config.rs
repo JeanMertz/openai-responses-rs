@@ -73,6 +73,29 @@ pub struct ReasoningConfig {
     pub effort: Option<ReasoningEffort>,
     /// A summary of the reasoning performed by the model. This can be useful for debugging and understanding the model's reasoning process.
     pub summary: Option<SummaryConfig>,
+    /// Selects the reasoning execution mode. Supported by GPT-5.6 and later models; older models reject the field.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<ReasoningMode>,
+    /// Controls which reasoning items from earlier turns the model may render into the next sample. Supported by GPT-5.6 and later models; older models reject the field.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context: Option<ReasoningContext>,
+}
+
+/// The reasoning execution mode. `Pro` performs more model work before returning a single final answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ReasoningMode {
+    Standard,
+    Pro,
+}
+
+/// Controls which reasoning items from earlier turns the model may render into the next sample.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReasoningContext {
+    Auto,
+    CurrentTurn,
+    AllTurns,
 }
 
 /// Constrains effort on reasoning for [reasoning models](https://platform.openai.com/docs/guides/reasoning).
@@ -88,6 +111,7 @@ pub enum ReasoningEffort {
     Medium,
     High,
     XHigh,
+    Max,
 }
 
 /// A summary of the reasoning performed by the model. This can be useful for debugging and understanding the model's reasoning process.

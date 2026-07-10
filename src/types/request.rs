@@ -33,6 +33,12 @@ pub struct Request {
     /// Learn more about [conversation state](https://platform.openai.com/docs/guides/conversation-state).
     pub previous_response_id: Option<String>,
     /// Configuration options for [reasoning models](https://platform.openai.com/docs/guides/reasoning).
+    /// Groups requests that share a common prompt prefix for cache routing. Required on GPT-5.6 and later models for reliable cache matching.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_cache_key: Option<String>,
+    /// Request-wide prompt cache policy. Supported by GPT-5.6 and later models; older models reject the field.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_cache_options: Option<PromptCacheOptions>,
     pub reasoning: Option<ReasoningConfig>,
     /// Specifies the latency tier to use for processing the request.
     pub service_tier: Option<ServiceTier>,
@@ -90,9 +96,43 @@ impl Default for Request {
             max_output_tokens: None,
             parallel_tool_calls: None,
             previous_response_id: None,
+            prompt_cache_key: None,
+            prompt_cache_options: None,
             input: Input::Text(String::new()),
         }
     }
+}
+
+/// Request-wide prompt cache policy for GPT-5.6 and later models.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PromptCacheOptions {
+    /// `implicit` (the default) also places a breakpoint on the latest message; `explicit` uses only the breakpoints marked in the input.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<PromptCacheMode>,
+    /// Minimum cache lifetime for all breakpoints written by the request. The only supported value is currently `"30m"`, which is also the default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ttl: Option<String>,
+}
+
+/// The request-wide prompt cache mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PromptCacheMode {
+    Implicit,
+    Explicit,
+}
+
+/// Marks the end of a reusable prompt prefix on a content block. The prefix includes the block itself and all prompt content rendered before it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PromptCacheBreakpoint {
+    pub mode: PromptCacheBreakpointMode,
+}
+
+/// The breakpoint mode. `explicit` is the only valid value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PromptCacheBreakpointMode {
+    Explicit,
 }
 
 /// Text, image, or file inputs to the model, used to generate a response.
@@ -173,7 +213,12 @@ pub struct APIInputMessage {
 pub enum ContentItem {
     /// A text input to the model.
     #[serde(rename = "input_text")]
-    Text { text: String },
+    Text {
+        text: String,
+        /// Marks this block as the end of a cacheable prompt prefix. Supported by GPT-5.6 and later models; older models reject the field.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        prompt_cache_breakpoint: Option<PromptCacheBreakpoint>,
+    },
     /// An image input to the model. Learn about [image inputs](https://platform.openai.com/docs/guides/vision).
     #[serde(rename = "input_image")]
     Image {
@@ -183,6 +228,8 @@ pub enum ContentItem {
         file_id: Option<String>,
         /// The URL of the image to be sent to the model. A fully qualified URL or base64 encoded image in a data URL.
         image_url: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        prompt_cache_breakpoint: Option<PromptCacheBreakpoint>,
     },
     /// A file input to the model.
     #[serde(rename = "input_file")]
@@ -193,6 +240,8 @@ pub enum ContentItem {
         file_id: Option<String>,
         /// The name of the file to be sent to the model.
         filename: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        prompt_cache_breakpoint: Option<PromptCacheBreakpoint>,
     },
 }
 
