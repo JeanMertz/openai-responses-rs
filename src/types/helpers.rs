@@ -15,21 +15,6 @@ macro_rules! string_variant {
     };
 }
 
-macro_rules! string_variant_var {
-    ($name:ident, $variant:ident, $key:ident) => {
-        impl From<String> for $name {
-            fn from(value: String) -> Self {
-                Self::$variant { $key: value }
-            }
-        }
-        impl From<&str> for $name {
-            fn from(value: &str) -> Self {
-                Self::from(value.to_string())
-            }
-        }
-    };
-}
-
 impl From<InputMessage> for InputListItem {
     fn from(value: InputMessage) -> Self {
         Self::Message(value)
@@ -43,7 +28,6 @@ impl From<InputItem> for InputListItem {
 
 string_variant!(Input, Text);
 string_variant!(ContentInput, Text);
-string_variant_var!(ContentItem, Text, text);
 
 impl From<String> for Model {
     fn from(s: String) -> Self {
@@ -66,5 +50,20 @@ impl From<String> for Model {
 impl From<&str> for Model {
     fn from(s: &str) -> Self {
         Self::from(s.to_string())
+    }
+}
+
+impl From<String> for ContentItem {
+    fn from(value: String) -> Self {
+        Self::Text {
+            text: value,
+            prompt_cache_breakpoint: None,
+        }
+    }
+}
+
+impl From<&str> for ContentItem {
+    fn from(value: &str) -> Self {
+        Self::from(value.to_string())
     }
 }
