@@ -131,5 +131,7 @@ pub enum ServiceTier {
     #[default]
     Auto,
     Flex,
+    Priority,
+    Fast,
     Default,
 }
