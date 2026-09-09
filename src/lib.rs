@@ -3,8 +3,8 @@
 #![doc = include_str!("../README.md")]
 
 use reqwest::{
-    Client as Http, StatusCode,
     header::{self, HeaderMap, HeaderValue},
+    Client as Http, StatusCode,
 };
 use serde_json::json;
 use std::env;
@@ -25,6 +25,8 @@ pub mod types;
 pub struct Client {
     client: reqwest::Client,
     base_url: String,
+    responses_path: String,
+    headers: HeaderMap,
 }
 
 /// Errors that can occur when creating a new Client.
@@ -70,6 +72,8 @@ impl Client {
         Ok(Self {
             client,
             base_url: "https://api.openai.com".to_owned(),
+            responses_path: "/v1/responses".to_owned(),
+            headers: HeaderMap::new(),
         })
     }
 
@@ -77,6 +81,26 @@ impl Client {
     #[must_use]
     pub fn with_base_url(mut self, base_url: impl Into<String>) -> Self {
         self.base_url = base_url.into();
+        self
+    }
+
+    /// Set the path the responses endpoints are served from.
+    ///
+    /// Defaults to `/v1/responses`. Set this when the API is reached through a
+    /// host that serves the endpoint at a different path.
+    #[must_use]
+    pub fn with_responses_path(mut self, path: impl Into<String>) -> Self {
+        self.responses_path = path.into();
+        self
+    }
+
+    /// Send `headers` with every request.
+    ///
+    /// These are merged over the `Authorization` header set at construction, so
+    /// an `Authorization` entry here replaces it.
+    #[must_use]
+    pub fn with_headers(mut self, headers: HeaderMap) -> Self {
+        self.headers = headers;
         self
     }
 
@@ -110,7 +134,8 @@ impl Client {
 
         let mut response = self
             .client
-            .post(format!("{}/v1/responses", self.base_url))
+            .post(format!("{}{}", self.base_url, self.responses_path))
+            .headers(self.headers.clone())
             .json(&request)
             .send()
             .await?;
@@ -138,7 +163,8 @@ impl Client {
 
         let mut event_source = self
             .client
-            .post(format!("{}/v1/responses", self.base_url))
+            .post(format!("{}{}", self.base_url, self.responses_path))
+            .headers(self.headers.clone())
             .json(&request)
             .eventsource()
             .unwrap_or_else(|_| unreachable!("Body is never a stream"));
@@ -182,7 +208,11 @@ impl Client {
     ) -> Result<Result<Response, Error>, reqwest::Error> {
         let mut response = self
             .client
-            .get(format!("{}/v1/responses/{response_id}", self.base_url))
+            .get(format!(
+                "{}{}/{response_id}",
+                self.base_url, self.responses_path
+            ))
+            .headers(self.headers.clone())
             .query(&json!({ "include": include }))
             .send()
             .await?;
@@ -201,7 +231,11 @@ impl Client {
     /// Errors if the request fails to send or has a non-200 status code.
     pub async fn delete(&self, response_id: &str) -> Result<(), reqwest::Error> {
         self.client
-            .delete(format!("{}/v1/responses/{response_id}", self.base_url))
+            .delete(format!(
+                "{}{}/{response_id}",
+                self.base_url, self.responses_path
+            ))
+            .headers(self.headers.clone())
             .send()
             .await?
             .error_for_status()?;
@@ -217,9 +251,10 @@ impl Client {
     pub async fn list_inputs(&self, response_id: &str) -> Result<InputItemList, reqwest::Error> {
         self.client
             .get(format!(
-                "{}/v1/responses/{response_id}/inputs",
-                self.base_url
+                "{}{}/{response_id}/inputs",
+                self.base_url, self.responses_path
             ))
+            .headers(self.headers.clone())
             .send()
             .await?
             .error_for_status()?
