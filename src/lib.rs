@@ -12,8 +12,8 @@ use types::{Error, Include, InputItemList, Request, Response, ResponseResult};
 #[cfg(feature = "stream")]
 use {
     async_fn_stream::try_fn_stream,
+    eventsource_stream::Eventsource as _,
     futures::{Stream, StreamExt},
-    reqwest_eventsource::{Event as EventSourceEvent, RequestBuilderExt},
     types::Event,
 };
 
@@ -48,8 +48,25 @@ pub enum CreateError {
 #[cfg(feature = "stream")]
 #[derive(Debug, thiserror::Error)]
 pub enum StreamError {
-    #[error("{0}")]
-    Stream(#[from] reqwest_eventsource::Error),
+    /// The request could not be sent.
+    #[error(transparent)]
+    Transport(#[from] reqwest::Error),
+
+    /// The API answered with a non-success status.
+    ///
+    /// The body is read here because the response is consumed by the stream; a
+    /// caller that only saw the status could not report what went wrong.
+    #[error("HTTP {status}: {body}")]
+    Status {
+        status: reqwest::StatusCode,
+        headers: Box<reqwest::header::HeaderMap>,
+        body: String,
+    },
+
+    /// The response body is not a well-formed event stream.
+    #[error("Failed to read the event stream: {0}")]
+    Sse(String),
+
     #[error("Failed to parse event data: {0}")]
     Parsing(#[from] serde_json::Error),
 }
@@ -154,6 +171,10 @@ impl Client {
     /// Have the model call your own [custom code](https://platform.openai.com/docs/guides/function-calling) or use built-in [tools](https://platform.openai.com/docs/guides/tools) like [web search](https://platform.openai.com/docs/guides/tools-web-search) or [file search](https://platform.openai.com/docs/guides/tools-file-search) to use your own data as input for the model's response.
     ///
     /// To receive the response as a regular HTTP response, use the `create` function.
+    ///
+    /// The response body is parsed as SSE regardless of its `Content-Type`: a
+    /// host that streams without labelling the response still returns a body
+    /// the caller can read.
     pub fn stream(
         &self,
         mut request: Request,
@@ -161,32 +182,45 @@ impl Client {
         // Use the `create` function to receive a regular HTTP response.
         request.stream = Some(true);
 
-        let mut event_source = self
+        let builder = self
             .client
             .post(format!("{}{}", self.base_url, self.responses_path))
             .headers(self.headers.clone())
-            .json(&request)
-            .eventsource()
-            .unwrap_or_else(|_| unreachable!("Body is never a stream"));
+            .json(&request);
 
         let stream = try_fn_stream(|emitter| async move {
-            while let Some(event) = event_source.next().await {
-                let message = match event {
-                    Ok(EventSourceEvent::Open) => continue,
-                    Ok(EventSourceEvent::Message(message)) => message,
+            let response = builder.send().await?;
+            let status = response.status();
+
+            if !status.is_success() {
+                let headers = Box::new(response.headers().clone());
+                let body = response.text().await.unwrap_or_default();
+
+                emitter
+                    .emit_err(StreamError::Status {
+                        status,
+                        headers,
+                        body,
+                    })
+                    .await;
+
+                return Ok(());
+            }
+
+            let mut events = response.bytes_stream().eventsource();
+
+            while let Some(event) = events.next().await {
+                match event {
+                    Ok(message) => match serde_json::from_str::<Event>(&message.data) {
+                        Ok(event) => emitter.emit(event).await,
+                        Err(error) => emitter.emit_err(StreamError::Parsing(error)).await,
+                    },
+                    // The body is broken from here on; what follows belongs to
+                    // a response the caller has already been told is bad.
                     Err(error) => {
-                        if matches!(error, reqwest_eventsource::Error::StreamEnded) {
-                            break;
-                        }
-
-                        emitter.emit_err(StreamError::Stream(error)).await;
-                        continue;
+                        emitter.emit_err(StreamError::Sse(error.to_string())).await;
+                        break;
                     }
-                };
-
-                match serde_json::from_str::<Event>(&message.data) {
-                    Ok(event) => emitter.emit(event).await,
-                    Err(error) => emitter.emit_err(StreamError::Parsing(error)).await,
                 }
             }
 
