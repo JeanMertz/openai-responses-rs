@@ -72,6 +72,9 @@ pub struct Response {
     pub store: bool,
     /// A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](https://platform.openai.com/docs/guides/safety-best-practices#end-user-ids).
     pub user: Option<String>,
+    /// Input items the API withheld from the model, with the reason.
+    #[serde(default)]
+    pub input_transformations: Vec<InputTransformation>,
 }
 
 impl Response {
@@ -90,6 +93,19 @@ impl Response {
             })
             .collect::<String>()
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InputTransformation {
+    /// The id of the input item, e.g. a reasoning item's `rs_…` id.
+    pub id: String,
+    /// `removed`.
+    pub action: String,
+    /// `prefix_mismatch`, `end_user_mismatch`, `model_mismatch`,
+    /// `organization_mismatch`, or `turn_boundary`.
+    pub reason: String,
+    /// `reasoning`.
+    pub r#type: String,
 }
 
 /// Represents token usage details including input tokens, output tokens, a breakdown of output tokens, and the total tokens used.
